@@ -473,7 +473,7 @@ namespace JudgeBarMashVP
                 Color centerLineColor = Color.White;
 
                 // Define section boundaries
-                int[] boundaries = { -150, -100, -50, -1, 0, 1, 49, 100, 150 };
+                int[] boundaries = { 150, 100, 50, 1, 0, -1, -49, -100, -150 };
                 Color[] colors = { darkOrange, darkGreen, darkBlue, centerLineColor, darkBlue, darkGreen, darkOrange };
 
                 // Draw the sections
@@ -491,8 +491,8 @@ namespace JudgeBarMashVP
                     }
                     if (i == 3)
                     {
-                        int startXCenter = MapValueToX(-1);
-                        int endXCenter = MapValueToX(1);
+                        int startXCenter = MapValueToX(1);
+                        int endXCenter = MapValueToX(-1);
                         using (Brush brush = new SolidBrush(colors[i]))
                         {
                             g.FillRectangle(brush, startXCenter, 20, endXCenter - startXCenter, 15);
