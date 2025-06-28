@@ -35,6 +35,7 @@ namespace JudgeBarMashVP
         private Image<Gray, byte> _tesseractImage;
         private Stopwatch _stopwatch;
         public FixedSizeQueue<int> result50;
+        public FixedSizeQueue<int> resultTillReset;
         private int _frameCount;
         private int _fps;
         private bool isDebug = false;
@@ -62,6 +63,7 @@ namespace JudgeBarMashVP
             aiOCR = new AI_OCR();
             InitializeTesseract();
             result50 = new FixedSizeQueue<int>(50);
+            resultTillReset = new FixedSizeQueue<int>(10000);
             pictureBox.Click += PictureBox_Click;
             ScreenCapturer.OnScreenUpdated += OnScreenUpdated;
             ScreenCapturer.StartCapture();
@@ -73,6 +75,7 @@ namespace JudgeBarMashVP
         {
             // Clear result50 and fill it with zeros
             result50.ClearAndFillWithZeros();
+            resultTillReset.ClearAndFillWithZeros();
 
             // Redraw the bar
             UpdateBar();
@@ -87,10 +90,11 @@ namespace JudgeBarMashVP
         private void UpdateWindowTitle()
         {
             float average = CalculateAverage(result50);
-            float weightedAverage = CalculateWeightedAverage(result50);
+            //float weightedAverage = CalculateAverage(resultTillReset);
+            float fullAverage = CalculateAverage(resultTillReset);
             Dispatcher.BeginInvoke(() =>
             {
-                Title = $"{_fps} FPS | Average: {average:F2} | Weighted: {weightedAverage:F2}";
+                Title = $"{_fps} FPS | Average: {average:F2} | Since Reset: {fullAverage:F2} ({resultTillReset.GetCount()})";
             });
         }
 
@@ -289,6 +293,7 @@ namespace JudgeBarMashVP
             if (int.TryParse(response, out int aiResponse))
             {
                 result50.Enqueue(aiResponse);
+                resultTillReset.Enqueue(aiResponse);
             }
         }
 
@@ -298,6 +303,7 @@ namespace JudgeBarMashVP
             if (int.TryParse(response, out int aiResponse))
             {
                 result50.Enqueue(aiResponse);
+                resultTillReset.Enqueue(aiResponse);
             }
         }
 
@@ -326,7 +332,7 @@ namespace JudgeBarMashVP
             // Only parse when "ms" marker is in string and confidence is more than 80
             if (tessWords.Length > 0 && tessWords[0].Text != "ms" && tessWords[0].Confident > _confidence)
             {
-                parseOCR(ocrResult, result50, _grayImage);
+                parseOCR(ocrResult, result50, resultTillReset, _grayImage);
             }
         }
 
@@ -398,7 +404,7 @@ namespace JudgeBarMashVP
             }
         }
 
-        private void parseOCR(string ocrResult, FixedSizeQueue<int> result50, Image<Gray, byte> image)
+        private void parseOCR(string ocrResult, FixedSizeQueue<int> result50, FixedSizeQueue<int> resultTillReset, Image<Gray, byte> image)
         {
             if (ocrResult.Contains("ms"))
             {
@@ -417,22 +423,28 @@ namespace JudgeBarMashVP
                     // Try to parse the number
                     if (int.TryParse(numberPart, out int ocrResponse))
                     {
-                        if (AreSpecifiedPixelsWhite(image, negativeSignPixelPositions))
+                        if (ocrResponse < 150 && ocrResponse > -150)
                         {
-                            if (AreSpecifiedPixelsWhite(image, positiveSignPixelPositions))
+                            if (AreSpecifiedPixelsWhite(image, negativeSignPixelPositions))
                             {
-                                result50.Enqueue(ocrResponse);
+                                if (AreSpecifiedPixelsWhite(image, positiveSignPixelPositions))
+                                {
+                                    result50.Enqueue(ocrResponse);
+                                    resultTillReset.Enqueue(ocrResponse);
+                                }
+                                else
+                                {
+                                    result50.Enqueue(ocrResponse * -1);
+                                    resultTillReset.Enqueue(ocrResponse * - 1);
+                                }
                             }
                             else
                             {
-                                result50.Enqueue(ocrResponse * -1);
+                                result50.Enqueue(ocrResponse);
+                                resultTillReset.Enqueue(ocrResponse);
                             }
+                            UpdateBar();
                         }
-                        else
-                        {
-                            result50.Enqueue(ocrResponse);
-                        }
-                        UpdateBar();
                     }
                 }
             }
@@ -512,11 +524,13 @@ namespace JudgeBarMashVP
 
                 // Calculate average and weighted average
                 float average = CalculateAverage(result50);
-                float weightedAverage = CalculateWeightedAverage(result50);
+                float fullAverage = CalculateAverage(resultTillReset);
+                //float weightedAverage = CalculateWeightedAverage(result50);
 
                 // Draw the triangles
                 DrawTriangle(g, average, Color.Orange, 20);
-                DrawTriangle(g, weightedAverage, Color.Yellow, 20, true);
+                DrawTriangle(g, fullAverage, Color.Yellow, 20, true);
+                //DrawTriangle(g, weightedAverage, Color.Yellow, 20, true);
             }
 
             // Update the pictureBox image
@@ -539,7 +553,7 @@ namespace JudgeBarMashVP
 
         private float CalculateAverage(FixedSizeQueue<int> queue)
         {
-            if (queue.Size == 0) return 0;
+            if (queue.GetCount() == 0) return 0;
 
             float sum = 0;
             foreach (var value in queue.PrintQueue().Split(','))
@@ -549,7 +563,7 @@ namespace JudgeBarMashVP
                     sum += intValue;
                 }
             }
-            return sum / queue.Size;
+            return sum / queue.GetCount();
         }
 
         private float CalculateWeightedAverage(FixedSizeQueue<int> queue)

@@ -105,5 +105,10 @@ namespace JudgeBarMashVP
             _tail = 0;
             _count = 0;
         }
+
+        public int GetCount()
+        {
+            return _count;
+        }
     }
 }
